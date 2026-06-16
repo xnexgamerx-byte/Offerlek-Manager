@@ -73,8 +73,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (phone: string, password: string) => {
     const response: LoginResponse = await api.auth.login(phone, password);
-    const token = response.data?.token;
-    const user = response.data?.user;
+    const token = response.token;
+    const user = response.user;
 
     if (!token) throw new Error("لم يُستلم token من الخادم");
 
