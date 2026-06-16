@@ -68,13 +68,15 @@ export interface RestaurantStats {
 }
 
 export interface LoginResponse {
-  token: string;
-  role?: string;
-  user?: {
-    id: string;
-    role: string;
-    name?: string;
-    phone?: string;
+  success: boolean;
+  data: {
+    token: string;
+    user: {
+      id: string;
+      role: string;
+      name?: string;
+      phone?: string;
+    };
   };
 }
 
