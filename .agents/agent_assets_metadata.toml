@@ -1,0 +1,8 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "H6sP6OfAGYL6POwexqdhz"
+uri = "file://artifacts/mobile/assets/images/icon.png"
+type = "image"
+title = "offerlek management icon"

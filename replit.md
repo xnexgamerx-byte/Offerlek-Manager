@@ -1,45 +1,65 @@
-# [Project name]
+# أوفرلك - الإدارة
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+تطبيق Expo React Native لإدارة المطاعم والسواق، يتصل بـ Backend خارجي (TalabatOfferlek.replit.app).
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- `pnpm --filter @workspace/mobile run dev` — تشغيل تطبيق Expo (المنفذ من workflow)
+- `pnpm run typecheck` — فحص TypeScript لجميع الحزم
+- `pnpm run build` — بناء جميع الحزم
 
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- Mobile: Expo SDK + Expo Router (file-based routing)
+- State: React Query (@tanstack/react-query)
+- Font: Cairo Arabic (RTL)
+- Auth: JWT stored in AsyncStorage
+- Backend: TalabatOfferlek.replit.app (external)
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/mobile/` — تطبيق Expo الرئيسي
+- `artifacts/mobile/app/` — شاشات التطبيق (Expo Router)
+- `artifacts/mobile/app/(auth)/` — شاشات تسجيل الدخول
+- `artifacts/mobile/app/(restaurant)/` — واجهة المطعم (الطلبات، القائمة، الإحصائيات)
+- `artifacts/mobile/app/(driver)/` — واجهة السائق (المتاحة، الحالي، السجل)
+- `artifacts/mobile/app/(tabs)/index.tsx` — Auth guard & redirect
+- `artifacts/mobile/context/AuthContext.tsx` — JWT auth state
+- `artifacts/mobile/services/api.ts` — API client for TalabatOfferlek
+- `artifacts/mobile/constants/colors.ts` — Design tokens (orange #FF6B35)
+- `artifacts/mobile/constants/fonts.ts` — Cairo font family constants
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- **External Backend Only**: التطبيق يتصل مباشرة بـ TalabatOfferlek.replit.app، لا يوجد backend محلي
+- **Role-based routing**: بعد Login، يُحلَّل الـ JWT للحصول على الـ role، ثم يتم التوجيه التلقائي
+- **RTL**: I18nManager.forceRTL(true) مُفعَّل في _layout.tsx
+- **Cairo font**: خط عربي مُحمَّل عبر @expo-google-fonts/cairo
+- **Polling**: الطلبات تُحدَّث تلقائياً كل 15 ثانية عبر React Query refetchInterval
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- شاشة تسجيل دخول مشتركة (رقم هاتف + كلمة مرور)
+- واجهة المطعم: إدارة الطلبات (قبول/رفض/جاهز)، إدارة القائمة (إضافة/تعديل/حذف/تفعيل)، إحصائيات اليوم
+- واجهة السائق: الطلبات المتاحة (استلام)، طلبي الحالي (تسليم)، سجل التوصيلات اليوم
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+_يُضاف حسب طلب المستخدم_
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- `I18nManager.forceRTL(true)` يتطلب reload ليطبَّق على الجلسة الأولى
+- API endpoints في `services/api.ts` تعتمد على هيكل TalabatOfferlek — قد تحتاج تعديل حسب ردود الـ backend الفعلية
+- لا تستخدم `npx expo start` مباشرة — استخدم `restart_workflow` بدلاً من ذلك
+
+## Test Credentials
+
+- مطعم: 07701000001 / password123
+- سائق: 07702000001 / password123
 
 ## Pointers
 
 - See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- See the `expo` skill for Expo-specific guidelines

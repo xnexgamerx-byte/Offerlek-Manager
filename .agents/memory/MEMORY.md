@@ -1,0 +1,1 @@
+- [Offerlek Admin App](offerlek-admin.md) — Expo app connecting to external backend TalabatOfferlek.replit.app; role-based routing (restaurant/driver) from JWT; Cairo Arabic font; RTL enabled.
