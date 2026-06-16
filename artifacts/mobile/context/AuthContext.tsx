@@ -26,7 +26,9 @@ function decodeJWTRole(token: string): string | null {
 
 interface AuthState {
   token: string | null;
+  userId: string | null;
   role: "restaurant" | "driver" | null;
+  restaurantId: string | null;
   isLoading: boolean;
 }
 
@@ -39,33 +41,41 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 const TOKEN_KEY = "@offerlek:token";
 const ROLE_KEY = "@offerlek:role";
+const USER_ID_KEY = "@offerlek:userId";
+const RESTAURANT_ID_KEY = "@offerlek:restaurantId";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>({
     token: null,
+    userId: null,
     role: null,
+    restaurantId: null,
     isLoading: true,
   });
 
   useEffect(() => {
     async function loadToken() {
       try {
-        const [token, role] = await Promise.all([
+        const [token, role, userId, restaurantId] = await Promise.all([
           AsyncStorage.getItem(TOKEN_KEY),
           AsyncStorage.getItem(ROLE_KEY),
+          AsyncStorage.getItem(USER_ID_KEY),
+          AsyncStorage.getItem(RESTAURANT_ID_KEY),
         ]);
         if (token) {
           setApiToken(token);
           setState({
             token,
+            userId,
             role: (role as "restaurant" | "driver") || null,
+            restaurantId,
             isLoading: false,
           });
         } else {
-          setState({ token: null, role: null, isLoading: false });
+          setState({ token: null, userId: null, role: null, restaurantId: null, isLoading: false });
         }
       } catch {
-        setState({ token: null, role: null, isLoading: false });
+        setState({ token: null, userId: null, role: null, restaurantId: null, isLoading: false });
       }
     }
     loadToken();
@@ -80,15 +90,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const role =
       ((user?.role || decodeJWTRole(token)) as "restaurant" | "driver") || null;
+    const userId = user?.id || null;
 
     setApiToken(token);
+
+    // For restaurant role: find the restaurant ID linked to this user
+    let restaurantId: string | null = null;
+    if (role === "restaurant" && userId) {
+      try {
+        const restaurants = await api.restaurants.list();
+        const mine = restaurants.find((r) => r.userId === userId);
+        restaurantId = mine?.id || null;
+      } catch {
+        // non-fatal — screens will handle null restaurantId gracefully
+      }
+    }
+
     await Promise.all([
       AsyncStorage.setItem(TOKEN_KEY, token),
-      role
-        ? AsyncStorage.setItem(ROLE_KEY, role)
-        : AsyncStorage.removeItem(ROLE_KEY),
+      role ? AsyncStorage.setItem(ROLE_KEY, role) : AsyncStorage.removeItem(ROLE_KEY),
+      userId ? AsyncStorage.setItem(USER_ID_KEY, userId) : AsyncStorage.removeItem(USER_ID_KEY),
+      restaurantId
+        ? AsyncStorage.setItem(RESTAURANT_ID_KEY, restaurantId)
+        : AsyncStorage.removeItem(RESTAURANT_ID_KEY),
     ]);
-    setState({ token, role, isLoading: false });
+
+    setState({ token, userId, role, restaurantId, isLoading: false });
   }, []);
 
   const logout = useCallback(async () => {
@@ -96,8 +123,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await Promise.all([
       AsyncStorage.removeItem(TOKEN_KEY),
       AsyncStorage.removeItem(ROLE_KEY),
+      AsyncStorage.removeItem(USER_ID_KEY),
+      AsyncStorage.removeItem(RESTAURANT_ID_KEY),
     ]);
-    setState({ token: null, role: null, isLoading: false });
+    setState({ token: null, userId: null, role: null, restaurantId: null, isLoading: false });
   }, []);
 
   const value = useMemo(

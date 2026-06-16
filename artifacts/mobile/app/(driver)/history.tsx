@@ -20,10 +20,7 @@ function formatCurrency(n: number) {
 }
 
 function formatTime(dateStr: string) {
-  return new Date(dateStr).toLocaleTimeString("ar-IQ", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return new Date(dateStr).toLocaleTimeString("ar-IQ", { hour: "2-digit", minute: "2-digit" });
 }
 
 export default function HistoryScreen() {
@@ -33,12 +30,14 @@ export default function HistoryScreen() {
 
   const { data: orders = [], isLoading, isRefetching, refetch } = useQuery({
     queryKey: ["driver-history"],
-    queryFn: api.driver.history,
+    queryFn: async () => {
+      const all = await api.orders.list();
+      const today = new Date().toISOString().slice(0, 10);
+      return all.filter((o) => o.status === "delivered" && o.createdAt.startsWith(today));
+    },
   });
 
-  const totalEarned = orders
-    .filter((o) => o.status === "delivered")
-    .reduce((sum, o) => sum + o.total, 0);
+  const totalEarned = orders.reduce((s, o) => s + o.totalAmount, 0);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -52,14 +51,7 @@ export default function HistoryScreen() {
           borderBottomColor: colors.border,
         }}
       >
-        <Text
-          style={{
-            fontSize: 24,
-            fontFamily: Fonts.bold,
-            color: colors.foreground,
-            textAlign: "right",
-          }}
-        >
+        <Text style={{ fontSize: 24, fontFamily: Fonts.bold, color: colors.foreground, textAlign: "right" }}>
           سجل التوصيلات
         </Text>
       </View>
@@ -107,17 +99,8 @@ export default function HistoryScreen() {
               </View>
             ) : null
           }
-          contentContainerStyle={{
-            padding: 16,
-            paddingBottom: insets.bottom + (Platform.OS === "web" ? 34 : 80),
-          }}
-          refreshControl={
-            <RefreshControl
-              refreshing={isRefetching}
-              onRefresh={refetch}
-              tintColor={colors.primary}
-            />
-          }
+          contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + (Platform.OS === "web" ? 34 : 80) }}
+          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />}
           ListEmptyComponent={
             <View style={{ alignItems: "center", paddingTop: 80, gap: 12 }}>
               <Feather name="clock" size={48} color={colors.mutedForeground} />
@@ -144,7 +127,7 @@ export default function HistoryScreen() {
             >
               <View style={{ alignItems: "flex-start" }}>
                 <Text style={{ fontFamily: Fonts.bold, fontSize: 15, color: colors.primary }}>
-                  {formatCurrency(item.total)}
+                  {formatCurrency(item.totalAmount)}
                 </Text>
                 <Text style={{ fontFamily: Fonts.regular, fontSize: 11, color: colors.mutedForeground, marginTop: 2 }}>
                   {formatTime(item.createdAt)}
@@ -152,26 +135,13 @@ export default function HistoryScreen() {
               </View>
               <View style={{ flex: 1, alignItems: "flex-end", paddingLeft: 12 }}>
                 <Text style={{ fontFamily: Fonts.semiBold, fontSize: 14, color: colors.foreground }}>
-                  {item.restaurantName || "المطعم"}
+                  {item.restaurant?.name || "المطعم"}
                 </Text>
-                <Text
-                  style={{ fontFamily: Fonts.regular, fontSize: 12, color: colors.mutedForeground, marginTop: 2 }}
-                  numberOfLines={1}
-                >
+                <Text style={{ fontFamily: Fonts.regular, fontSize: 12, color: colors.mutedForeground, marginTop: 2 }} numberOfLines={1}>
                   {item.deliveryAddress}
                 </Text>
               </View>
-              <View
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 18,
-                  backgroundColor: colors.success + "20",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  marginRight: 12,
-                }}
-              >
+              <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.success + "20", alignItems: "center", justifyContent: "center", marginRight: 12 }}>
                 <Feather name="check" size={18} color={colors.success} />
               </View>
             </View>

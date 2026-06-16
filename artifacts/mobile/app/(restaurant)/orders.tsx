@@ -8,7 +8,6 @@ import {
   Platform,
   Pressable,
   RefreshControl,
-  StyleSheet,
   Text,
   View,
 } from "react-native";
@@ -41,15 +40,21 @@ function formatCurrency(amount: number) {
   return `${amount.toLocaleString("ar-IQ")} د.ع`;
 }
 
+function shortId(id: string) {
+  return id.slice(0, 8).toUpperCase();
+}
+
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return "الآن";
-  if (mins < 60) return `منذ ${mins} دقيقة`;
+  if (mins < 60) return `منذ ${mins} د`;
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `منذ ${hrs} ساعة`;
-  return `منذ ${Math.floor(hrs / 24)} يوم`;
+  return `منذ ${hrs} س`;
 }
+
+const NEW_STATUSES = ["pending", "accepted"];
+const PREVIOUS_STATUSES = ["ready", "picked_up", "delivered", "rejected"];
 
 function OrderCard({
   order,
@@ -81,7 +86,8 @@ function OrderCard({
         elevation: 2,
       }}
     >
-      <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 10 }}>
+      {/* Header */}
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
         <View
           style={{
             backgroundColor: statusColor + "20",
@@ -95,82 +101,73 @@ function OrderCard({
           </Text>
         </View>
         <View style={{ alignItems: "flex-end" }}>
-          <Text style={{ fontSize: 15, fontFamily: Fonts.bold, color: colors.foreground }}>
-            {order.customerName}
+          <Text style={{ fontSize: 14, fontFamily: Fonts.bold, color: colors.foreground }}>
+            طلب #{shortId(order.id)}
           </Text>
-          <Text style={{ fontSize: 12, fontFamily: Fonts.regular, color: colors.mutedForeground }}>
-            #{order.orderNumber} · {timeAgo(order.createdAt)}
+          <Text style={{ fontSize: 11, fontFamily: Fonts.regular, color: colors.mutedForeground }}>
+            {timeAgo(order.createdAt)}
           </Text>
         </View>
       </View>
 
-      <View
-        style={{
-          backgroundColor: colors.background,
-          borderRadius: colors.radius,
-          padding: 10,
-          marginBottom: 10,
-        }}
-      >
-        {order.items.map((item, i) => (
-          <View
-            key={i}
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "center",
-              paddingVertical: 3,
-            }}
-          >
-            <Text style={{ fontSize: 13, fontFamily: Fonts.regular, color: colors.mutedForeground }}>
-              {formatCurrency(item.price * item.quantity)}
-            </Text>
-            <Text style={{ fontSize: 13, fontFamily: Fonts.regular, color: colors.foreground }}>
-              {item.name} × {item.quantity}
-            </Text>
-          </View>
-        ))}
+      {/* Items — only when detail is loaded */}
+      {order.items && order.items.length > 0 && (
         <View
           style={{
-            flexDirection: "row",
-            justifyContent: "space-between",
-            borderTopWidth: 1,
-            borderTopColor: colors.border,
-            paddingTop: 8,
-            marginTop: 6,
+            backgroundColor: colors.background,
+            borderRadius: colors.radius,
+            padding: 10,
+            marginBottom: 10,
           }}
         >
-          <Text style={{ fontSize: 14, fontFamily: Fonts.bold, color: colors.primary }}>
-            {formatCurrency(order.total)}
-          </Text>
-          <Text style={{ fontSize: 13, fontFamily: Fonts.semiBold, color: colors.foreground }}>
-            الإجمالي
-          </Text>
+          {order.items.map((item) => (
+            <View
+              key={item.id}
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                paddingVertical: 3,
+              }}
+            >
+              <Text style={{ fontSize: 13, fontFamily: Fonts.regular, color: colors.mutedForeground }}>
+                {formatCurrency(item.price * item.quantity)}
+              </Text>
+              <Text style={{ fontSize: 13, fontFamily: Fonts.regular, color: colors.foreground }}>
+                {item.name} × {item.quantity}
+              </Text>
+            </View>
+          ))}
         </View>
-      </View>
+      )}
 
+      {/* Total + address */}
       <View
         style={{
           flexDirection: "row",
+          justifyContent: "space-between",
           alignItems: "center",
-          justifyContent: "flex-end",
-          gap: 6,
-          marginBottom: 12,
+          marginBottom: 8,
         }}
       >
-        <Feather name="map-pin" size={13} color={colors.mutedForeground} />
-        <Text
-          style={{ fontSize: 13, fontFamily: Fonts.regular, color: colors.mutedForeground, flex: 1, textAlign: "right" }}
-          numberOfLines={1}
-        >
-          {order.deliveryAddress}
+        <Text style={{ fontSize: 15, fontFamily: Fonts.bold, color: colors.primary }}>
+          {formatCurrency(order.totalAmount)}
         </Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 4, flex: 1, justifyContent: "flex-end" }}>
+          <Text
+            style={{ fontSize: 13, fontFamily: Fonts.regular, color: colors.mutedForeground, textAlign: "right", maxWidth: "80%" }}
+            numberOfLines={1}
+          >
+            {order.deliveryAddress}
+          </Text>
+          <Feather name="map-pin" size={13} color={colors.mutedForeground} />
+        </View>
       </View>
 
+      {/* Actions */}
       {isUpdating ? (
-        <ActivityIndicator color={colors.primary} style={{ alignSelf: "center" }} />
+        <ActivityIndicator color={colors.primary} style={{ alignSelf: "center", marginTop: 4 }} />
       ) : (
-        <View style={{ flexDirection: "row", gap: 8 }}>
+        <View style={{ flexDirection: "row", gap: 8, marginTop: 4 }}>
           {order.status === "pending" && (
             <>
               <Pressable
@@ -236,41 +233,35 @@ export default function OrdersScreen() {
   const qc = useQueryClient();
   const [activeTab, setActiveTab] = useState<"new" | "previous">("new");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const topPad = insets.top + (Platform.OS === "web" ? 67 : 0);
 
-  const newQuery = useQuery({
-    queryKey: ["restaurant-orders", "pending"],
-    queryFn: () => api.restaurant.orders.list("pending"),
+  // Single query — filter client-side to avoid duplicate keys
+  const { data: allOrders = [], isLoading, isRefetching, refetch } = useQuery({
+    queryKey: ["restaurant-orders"],
+    queryFn: api.orders.list,
     refetchInterval: 15000,
   });
 
-  const acceptedQuery = useQuery({
-    queryKey: ["restaurant-orders", "accepted"],
-    queryFn: () => api.restaurant.orders.list("accepted"),
-    refetchInterval: 15000,
-  });
+  // Remove any duplicate IDs
+  const uniqueOrders = allOrders.filter(
+    (o, i, arr) => arr.findIndex((x) => x.id === o.id) === i
+  );
 
-  const previousQuery = useQuery({
-    queryKey: ["restaurant-orders", "previous"],
-    queryFn: () => api.restaurant.orders.list("delivered,rejected,ready,picked_up"),
-  });
+  const newOrders = uniqueOrders.filter((o) => NEW_STATUSES.includes(o.status));
+  const previousOrders = uniqueOrders.filter((o) => PREVIOUS_STATUSES.includes(o.status));
+  const displayOrders = activeTab === "new" ? newOrders : previousOrders;
 
   const updateMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) =>
-      api.restaurant.orders.updateStatus(id, status),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["restaurant-orders"] });
-    },
+      api.orders.updateStatus(id, status),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["restaurant-orders"] }),
   });
 
   async function handleAction(order: Order, status: string) {
     if (status === "rejected") {
       Alert.alert("تأكيد الرفض", "هل تريد رفض هذا الطلب؟", [
         { text: "إلغاء", style: "cancel" },
-        {
-          text: "رفض",
-          style: "destructive",
-          onPress: () => doUpdate(order.id, status),
-        },
+        { text: "رفض", style: "destructive", onPress: () => doUpdate(order.id, status) },
       ]);
     } else {
       doUpdate(order.id, status);
@@ -289,19 +280,9 @@ export default function OrdersScreen() {
     }
   }
 
-  const newOrders = [
-    ...(newQuery.data || []),
-    ...(acceptedQuery.data || []),
-  ];
-  const previousOrders = previousQuery.data || [];
-  const isLoading = activeTab === "new" ? newQuery.isLoading : previousQuery.isLoading;
-  const isRefetching = activeTab === "new" ? newQuery.isRefetching : previousQuery.isRefetching;
-  const displayOrders = activeTab === "new" ? newOrders : previousOrders;
-
-  const topPad = insets.top + (Platform.OS === "web" ? 67 : 0);
-
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
+      {/* Header */}
       <View
         style={{
           backgroundColor: colors.card,
@@ -313,18 +294,12 @@ export default function OrdersScreen() {
         }}
       >
         <Text
-          style={{
-            fontSize: 24,
-            fontFamily: Fonts.bold,
-            color: colors.foreground,
-            textAlign: "right",
-            marginBottom: 16,
-          }}
+          style={{ fontSize: 24, fontFamily: Fonts.bold, color: colors.foreground, textAlign: "right", marginBottom: 16 }}
         >
           الطلبات
         </Text>
 
-        <View style={{ flexDirection: "row", gap: 0 }}>
+        <View style={{ flexDirection: "row" }}>
           {(["new", "previous"] as const).map((tab) => (
             <Pressable
               key={tab}
@@ -334,8 +309,7 @@ export default function OrdersScreen() {
                 paddingVertical: 10,
                 alignItems: "center",
                 borderBottomWidth: 2.5,
-                borderBottomColor:
-                  activeTab === tab ? colors.primary : "transparent",
+                borderBottomColor: activeTab === tab ? colors.primary : "transparent",
               }}
             >
               <Text
@@ -355,10 +329,7 @@ export default function OrdersScreen() {
       </View>
 
       {isLoading ? (
-        <ActivityIndicator
-          color={colors.primary}
-          style={{ flex: 1, alignSelf: "center" }}
-        />
+        <ActivityIndicator color={colors.primary} style={{ flex: 1, alignSelf: "center" }} />
       ) : (
         <FlatList
           data={displayOrders}
@@ -368,15 +339,7 @@ export default function OrdersScreen() {
             paddingBottom: insets.bottom + (Platform.OS === "web" ? 34 : 80),
           }}
           refreshControl={
-            <RefreshControl
-              refreshing={isRefetching}
-              onRefresh={() => {
-                newQuery.refetch();
-                previousQuery.refetch();
-                acceptedQuery.refetch();
-              }}
-              tintColor={colors.primary}
-            />
+            <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />
           }
           ListEmptyComponent={
             <View style={{ alignItems: "center", paddingTop: 60, gap: 12 }}>
@@ -385,13 +348,7 @@ export default function OrdersScreen() {
                 size={48}
                 color={colors.mutedForeground}
               />
-              <Text
-                style={{
-                  fontFamily: Fonts.regular,
-                  fontSize: 15,
-                  color: colors.mutedForeground,
-                }}
-              >
+              <Text style={{ fontFamily: Fonts.regular, fontSize: 15, color: colors.mutedForeground }}>
                 {activeTab === "new" ? "لا توجد طلبات جديدة" : "لا توجد طلبات سابقة"}
               </Text>
             </View>

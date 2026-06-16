@@ -6,6 +6,10 @@ export function setApiToken(token: string | null) {
   _token = token;
 }
 
+export function getApiToken() {
+  return _token;
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -33,38 +37,68 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return JSON.parse(text);
 }
 
+// ─── Types (matching actual API) ────────────────────────────────────────────
+
 export interface OrderItem {
+  id: string;
+  orderId: string;
+  menuItemId: string;
   name: string;
-  quantity: number;
   price: number;
+  quantity: number;
 }
 
 export interface Order {
   id: string;
-  orderNumber: string;
-  customerName: string;
-  items: OrderItem[];
-  total: number;
-  deliveryAddress: string;
+  customerId: string;
+  restaurantId: string;
+  driverId: string | null;
   status: "pending" | "accepted" | "rejected" | "ready" | "picked_up" | "delivered";
-  restaurantName?: string;
+  totalAmount: number;
+  deliveryFee: number;
+  deliveryAddress: string;
+  notes: string | null;
   createdAt: string;
+  updatedAt: string;
+  // Only present in GET /api/orders/:id detail
+  items?: OrderItem[];
+  restaurant?: {
+    id: string;
+    name: string;
+    address?: string;
+  };
 }
 
-export interface MenuItem {
+export interface MenuCategoryItem {
   id: string;
+  restaurantId: string;
+  categoryId: string;
   name: string;
   description?: string;
   price: number;
-  category: string;
   imageUrl?: string;
-  available: boolean;
+  isAvailable: boolean;
+  createdAt: string;
 }
 
-export interface RestaurantStats {
-  ordersCount: number;
-  totalSales: number;
-  averageOrder: number;
+export interface MenuCategory {
+  id: string;
+  name: string;
+  sortOrder: number;
+  items: MenuCategoryItem[];
+}
+
+export interface Restaurant {
+  id: string;
+  userId: string;
+  name: string;
+  description?: string;
+  imageUrl?: string;
+  category?: string;
+  address?: string;
+  phone?: string;
+  isOpen: boolean;
+  rating?: string;
 }
 
 export interface LoginResponse {
@@ -78,6 +112,8 @@ export interface LoginResponse {
   };
 }
 
+// ─── API ────────────────────────────────────────────────────────────────────
+
 export const api = {
   auth: {
     login: (phone: string, password: string) =>
@@ -87,49 +123,19 @@ export const api = {
       }),
   },
 
-  restaurant: {
-    orders: {
-      list: (status?: string) =>
-        request<Order[]>(
-          `/api/orders${status ? `?status=${status}` : ""}`
-        ),
-      updateStatus: (id: string, status: string) =>
-        request<Order>(`/api/orders/${id}`, {
-          method: "PATCH",
-          body: JSON.stringify({ status }),
-        }),
-    },
-    menu: {
-      list: () => request<MenuItem[]>("/api/menu"),
-      create: (data: Omit<MenuItem, "id">) =>
-        request<MenuItem>("/api/menu", {
-          method: "POST",
-          body: JSON.stringify(data),
-        }),
-      update: (id: string, data: Partial<MenuItem>) =>
-        request<MenuItem>(`/api/menu/${id}`, {
-          method: "PUT",
-          body: JSON.stringify(data),
-        }),
-      delete: (id: string) =>
-        request<void>(`/api/menu/${id}`, { method: "DELETE" }),
-    },
-    stats: () => request<RestaurantStats>("/api/restaurant/stats"),
+  restaurants: {
+    list: () => request<Restaurant[]>("/api/restaurants"),
+    menu: (restaurantId: string) =>
+      request<MenuCategory[]>(`/api/restaurants/${restaurantId}/menu`),
   },
 
-  driver: {
-    available: () => request<Order[]>("/api/driver/orders/available"),
-    current: () => request<Order | null>("/api/driver/current"),
-    pickup: (orderId: string) =>
-      request<Order>(`/api/orders/${orderId}`, {
-        method: "PATCH",
-        body: JSON.stringify({ status: "picked_up" }),
+  orders: {
+    list: () => request<Order[]>("/api/orders"),
+    detail: (id: string) => request<Order>(`/api/orders/${id}`),
+    updateStatus: (id: string, status: string) =>
+      request<Order>(`/api/orders/${id}/status`, {
+        method: "POST",
+        body: JSON.stringify({ status }),
       }),
-    deliver: (orderId: string) =>
-      request<Order>(`/api/orders/${orderId}`, {
-        method: "PATCH",
-        body: JSON.stringify({ status: "delivered" }),
-      }),
-    history: () => request<Order[]>("/api/driver/history"),
   },
 };

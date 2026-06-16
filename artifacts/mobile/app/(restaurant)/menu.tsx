@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -10,7 +10,6 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
-  StyleSheet,
   Switch,
   Text,
   TextInput,
@@ -19,7 +18,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
-import { api, MenuItem } from "@/services/api";
+import { api, getApiToken, MenuCategory, MenuCategoryItem } from "@/services/api";
+import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { Fonts } from "@/constants/fonts";
 
@@ -27,12 +27,20 @@ function formatCurrency(n: number) {
   return `${n.toLocaleString("ar-IQ")} د.ع`;
 }
 
-const EMPTY_FORM = {
+interface FormData {
+  name: string;
+  description: string;
+  price: string;
+  categoryName: string;
+  isAvailable: boolean;
+}
+
+const EMPTY_FORM: FormData = {
   name: "",
   description: "",
   price: "",
-  category: "",
-  available: true,
+  categoryName: "",
+  isAvailable: true,
 };
 
 function MenuItemCard({
@@ -41,7 +49,7 @@ function MenuItemCard({
   onDelete,
   onToggle,
 }: {
-  item: MenuItem;
+  item: MenuCategoryItem;
   onEdit: () => void;
   onDelete: () => void;
   onToggle: () => void;
@@ -57,7 +65,7 @@ function MenuItemCard({
         flexDirection: "row",
         alignItems: "center",
         gap: 12,
-        opacity: item.available ? 1 : 0.55,
+        opacity: item.isAvailable ? 1 : 0.55,
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.05,
@@ -65,31 +73,14 @@ function MenuItemCard({
         elevation: 1,
       }}
     >
-      <View style={{ flex: 1, alignItems: "flex-end" }}>
-        <Text style={{ fontSize: 15, fontFamily: Fonts.semiBold, color: colors.foreground }}>
-          {item.name}
-        </Text>
-        {item.description ? (
-          <Text
-            style={{ fontSize: 12, fontFamily: Fonts.regular, color: colors.mutedForeground, marginTop: 2 }}
-            numberOfLines={1}
-          >
-            {item.description}
-          </Text>
-        ) : null}
-        <Text style={{ fontSize: 14, fontFamily: Fonts.bold, color: colors.primary, marginTop: 4 }}>
-          {formatCurrency(item.price)}
-        </Text>
-      </View>
-
       <View style={{ alignItems: "center", gap: 8 }}>
         <Switch
-          value={item.available}
+          value={item.isAvailable}
           onValueChange={onToggle}
           trackColor={{ true: colors.success, false: colors.border }}
           thumbColor="#FFFFFF"
         />
-        <View style={{ flexDirection: "row", gap: 8 }}>
+        <View style={{ flexDirection: "row", gap: 10 }}>
           <Pressable onPress={onEdit} hitSlop={8}>
             <Feather name="edit-2" size={16} color={colors.primary} />
           </Pressable>
@@ -98,46 +89,46 @@ function MenuItemCard({
           </Pressable>
         </View>
       </View>
+      <View style={{ flex: 1, alignItems: "flex-end" }}>
+        <Text style={{ fontSize: 15, fontFamily: Fonts.semiBold, color: colors.foreground }}>
+          {item.name}
+        </Text>
+        {item.description ? (
+          <Text
+            style={{ fontSize: 12, fontFamily: Fonts.regular, color: colors.mutedForeground, marginTop: 2 }}
+            numberOfLines={2}
+          >
+            {item.description}
+          </Text>
+        ) : null}
+        <Text style={{ fontSize: 14, fontFamily: Fonts.bold, color: colors.primary, marginTop: 4 }}>
+          {formatCurrency(item.price)}
+        </Text>
+      </View>
     </View>
   );
 }
 
-interface FormData {
-  name: string;
-  description: string;
-  price: string;
-  category: string;
-  available: boolean;
-}
-
-function MenuForm({
+function ItemForm({
   visible,
   editItem,
+  categories,
   onClose,
   onSave,
   saving,
 }: {
   visible: boolean;
-  editItem: MenuItem | null;
+  editItem: MenuCategoryItem | null;
+  categories: string[];
   onClose: () => void;
   onSave: (data: FormData) => void;
   saving: boolean;
 }) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const [form, setForm] = useState<FormData>(
-    editItem
-      ? {
-          name: editItem.name,
-          description: editItem.description || "",
-          price: String(editItem.price),
-          category: editItem.category,
-          available: editItem.available,
-        }
-      : EMPTY_FORM
-  );
+  const [form, setForm] = useState<FormData>(EMPTY_FORM);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (visible) {
       setForm(
         editItem
@@ -145,8 +136,8 @@ function MenuForm({
               name: editItem.name,
               description: editItem.description || "",
               price: String(editItem.price),
-              category: editItem.category,
-              available: editItem.available,
+              categoryName: categories[0] || "",
+              isAvailable: editItem.isAvailable,
             }
           : EMPTY_FORM
       );
@@ -157,7 +148,7 @@ function MenuForm({
     backgroundColor: colors.input,
     borderRadius: colors.radius,
     padding: 12,
-    fontSize: 15,
+    fontSize: 15 as const,
     fontFamily: Fonts.regular,
     color: colors.foreground,
     textAlign: "right" as const,
@@ -168,10 +159,7 @@ function MenuForm({
 
   return (
     <Modal visible={visible} animationType="slide" transparent presentationStyle="overFullScreen">
-      <Pressable
-        style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)" }}
-        onPress={onClose}
-      />
+      <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)" }} onPress={onClose} />
       <View
         style={{
           backgroundColor: colors.card,
@@ -183,6 +171,7 @@ function MenuForm({
           bottom: 0,
           left: 0,
           right: 0,
+          maxHeight: "85%",
         }}
       >
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
@@ -202,7 +191,7 @@ function MenuForm({
             style={inputStyle}
             value={form.name}
             onChangeText={(v) => setForm((f) => ({ ...f, name: v }))}
-            placeholder="مثال: برجر دجاج"
+            placeholder="مثال: شاورما دجاج"
             placeholderTextColor={colors.mutedForeground}
           />
 
@@ -225,9 +214,9 @@ function MenuForm({
               </Text>
               <TextInput
                 style={inputStyle}
-                value={form.category}
-                onChangeText={(v) => setForm((f) => ({ ...f, category: v }))}
-                placeholder="مثال: برجر"
+                value={form.categoryName}
+                onChangeText={(v) => setForm((f) => ({ ...f, categoryName: v }))}
+                placeholder="مثال: مشاوي"
                 placeholderTextColor={colors.mutedForeground}
               />
             </View>
@@ -248,8 +237,8 @@ function MenuForm({
 
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
             <Switch
-              value={form.available}
-              onValueChange={(v) => setForm((f) => ({ ...f, available: v }))}
+              value={form.isAvailable}
+              onValueChange={(v) => setForm((f) => ({ ...f, isAvailable: v }))}
               trackColor={{ true: colors.success, false: colors.border }}
               thumbColor="#FFFFFF"
             />
@@ -286,107 +275,121 @@ function MenuForm({
 export default function MenuScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const { restaurantId } = useAuth();
   const qc = useQueryClient();
-
   const [formVisible, setFormVisible] = useState(false);
-  const [editItem, setEditItem] = useState<MenuItem | null>(null);
-  const [savingId, setSavingId] = useState<string | null>(null);
+  const [editItem, setEditItem] = useState<MenuCategoryItem | null>(null);
+  const [saving, setSaving] = useState(false);
+  const topPad = insets.top + (Platform.OS === "web" ? 67 : 0);
 
-  const { data: items = [], isLoading, isRefetching, refetch } = useQuery({
-    queryKey: ["menu"],
-    queryFn: api.restaurant.menu.list,
+  const {
+    data: categories = [],
+    isLoading,
+    isRefetching,
+    refetch,
+  } = useQuery<MenuCategory[]>({
+    queryKey: ["menu", restaurantId],
+    queryFn: () => {
+      if (!restaurantId) return Promise.resolve([]);
+      return api.restaurants.menu(restaurantId);
+    },
+    enabled: !!restaurantId,
   });
 
-  const createMutation = useMutation({
-    mutationFn: (data: Omit<MenuItem, "id">) => api.restaurant.menu.create(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["menu"] }),
-  });
+  const categoryNames = categories.map((c) => c.name);
 
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<MenuItem> }) =>
-      api.restaurant.menu.update(id, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["menu"] }),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: api.restaurant.menu.delete,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["menu"] }),
-  });
+  // Flatten items for operations
+  const allItems = categories.flatMap((c) => c.items);
 
   async function handleSave(form: FormData) {
-    if (!form.name.trim() || !form.price || !form.category.trim()) {
+    if (!form.name.trim() || !form.price || !form.categoryName.trim()) {
       Alert.alert("خطأ", "يرجى ملء الحقول المطلوبة");
       return;
     }
-    const data = {
-      name: form.name.trim(),
-      description: form.description.trim(),
-      price: Number(form.price),
-      category: form.category.trim(),
-      available: form.available,
-    };
-    setSavingId("saving");
+    setSaving(true);
     try {
+      // Find category ID
+      const cat = categories.find((c) => c.name === form.categoryName);
+      const body = {
+        name: form.name.trim(),
+        description: form.description.trim(),
+        price: Number(form.price),
+        categoryId: cat?.id,
+        isAvailable: form.isAvailable,
+      };
+
+      const token = getApiToken();
+      const authHeader = token ? `Bearer ${token}` : "";
+
       if (editItem) {
-        await updateMutation.mutateAsync({ id: editItem.id, data });
+        await fetch(
+          `https://TalabatOfferlek.replit.app/api/restaurants/${restaurantId}/menu/${editItem.id}`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json", Authorization: authHeader },
+            body: JSON.stringify(body),
+          }
+        );
       } else {
-        await createMutation.mutateAsync({ ...data, imageUrl: undefined });
+        await fetch(
+          `https://TalabatOfferlek.replit.app/api/restaurants/${restaurantId}/menu`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: authHeader },
+            body: JSON.stringify(body),
+          }
+        );
       }
+
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      qc.invalidateQueries({ queryKey: ["menu"] });
       setFormVisible(false);
       setEditItem(null);
     } catch (e: any) {
       Alert.alert("خطأ", e.message || "فشل حفظ الصنف");
     } finally {
-      setSavingId(null);
+      setSaving(false);
     }
   }
 
-  async function handleDelete(id: string) {
-    Alert.alert("تأكيد الحذف", "هل تريد حذف هذا الصنف؟", [
+  async function handleDelete(item: MenuCategoryItem) {
+    Alert.alert("تأكيد الحذف", `هل تريد حذف "${item.name}"؟`, [
       { text: "إلغاء", style: "cancel" },
       {
         text: "حذف",
         style: "destructive",
         onPress: async () => {
-          setSavingId(id);
           try {
-            await deleteMutation.mutateAsync(id);
+            await fetch(
+              `https://TalabatOfferlek.replit.app/api/restaurants/${restaurantId}/menu/${item.id}`,
+              { method: "DELETE", headers: { Authorization: `Bearer ${getApiToken() || ""}` } }
+            );
             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            qc.invalidateQueries({ queryKey: ["menu"] });
           } catch (e: any) {
             Alert.alert("خطأ", e.message || "فشل حذف الصنف");
-          } finally {
-            setSavingId(null);
           }
         },
       },
     ]);
   }
 
-  async function handleToggle(item: MenuItem) {
-    setSavingId(item.id + "_toggle");
+  async function handleToggle(item: MenuCategoryItem) {
     try {
-      await updateMutation.mutateAsync({
-        id: item.id,
-        data: { available: !item.available },
-      });
+      await fetch(
+        `https://TalabatOfferlek.replit.app/api/restaurants/${restaurantId}/menu/${item.id}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${getApiToken() || ""}` },
+          body: JSON.stringify({ isAvailable: !item.isAvailable }),
+        }
+      );
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      qc.invalidateQueries({ queryKey: ["menu"] });
     } catch (e: any) {
       Alert.alert("خطأ", e.message || "فشل تحديث الحالة");
-    } finally {
-      setSavingId(null);
     }
   }
-
-  const grouped = items.reduce<Record<string, MenuItem[]>>((acc, item) => {
-    const cat = item.category || "أخرى";
-    if (!acc[cat]) acc[cat] = [];
-    acc[cat].push(item);
-    return acc;
-  }, {});
-
-  const sections = Object.entries(grouped);
-  const topPad = insets.top + (Platform.OS === "web" ? 67 : 0);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -404,10 +407,7 @@ export default function MenuScreen() {
         }}
       >
         <Pressable
-          onPress={() => {
-            setEditItem(null);
-            setFormVisible(true);
-          }}
+          onPress={() => { setEditItem(null); setFormVisible(true); }}
           style={{
             backgroundColor: colors.primary,
             width: 36,
@@ -424,12 +424,19 @@ export default function MenuScreen() {
         </Text>
       </View>
 
-      {isLoading ? (
+      {!restaurantId ? (
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 12 }}>
+          <Feather name="alert-circle" size={40} color={colors.mutedForeground} />
+          <Text style={{ fontFamily: Fonts.regular, fontSize: 15, color: colors.mutedForeground }}>
+            لم يتم ربط الحساب بمطعم
+          </Text>
+        </View>
+      ) : isLoading ? (
         <ActivityIndicator color={colors.primary} style={{ flex: 1, alignSelf: "center" }} />
       ) : (
         <FlatList
-          data={sections}
-          keyExtractor={([cat]) => cat}
+          data={categories}
+          keyExtractor={(c) => c.id}
           contentContainerStyle={{
             padding: 16,
             paddingBottom: insets.bottom + (Platform.OS === "web" ? 34 : 80),
@@ -445,42 +452,24 @@ export default function MenuScreen() {
               </Text>
             </View>
           }
-          renderItem={({ item: [category, categoryItems] }) => (
+          renderItem={({ item: cat }) => (
             <View style={{ marginBottom: 8 }}>
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "flex-end",
-                  marginBottom: 10,
-                  gap: 8,
-                }}
-              >
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "flex-end", marginBottom: 10, gap: 8 }}>
                 <Text style={{ fontSize: 16, fontFamily: Fonts.bold, color: colors.foreground }}>
-                  {category}
+                  {cat.name}
                 </Text>
-                <View
-                  style={{
-                    backgroundColor: colors.primary + "20",
-                    paddingHorizontal: 8,
-                    paddingVertical: 2,
-                    borderRadius: 10,
-                  }}
-                >
+                <View style={{ backgroundColor: colors.primary + "20", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }}>
                   <Text style={{ fontSize: 12, fontFamily: Fonts.bold, color: colors.primary }}>
-                    {categoryItems.length}
+                    {cat.items.length}
                   </Text>
                 </View>
               </View>
-              {categoryItems.map((item) => (
+              {cat.items.map((item) => (
                 <MenuItemCard
                   key={item.id}
                   item={item}
-                  onEdit={() => {
-                    setEditItem(item);
-                    setFormVisible(true);
-                  }}
-                  onDelete={() => handleDelete(item.id)}
+                  onEdit={() => { setEditItem(item); setFormVisible(true); }}
+                  onDelete={() => handleDelete(item)}
                   onToggle={() => handleToggle(item)}
                 />
               ))}
@@ -489,15 +478,13 @@ export default function MenuScreen() {
         />
       )}
 
-      <MenuForm
+      <ItemForm
         visible={formVisible}
         editItem={editItem}
-        onClose={() => {
-          setFormVisible(false);
-          setEditItem(null);
-        }}
+        categories={categoryNames}
+        onClose={() => { setFormVisible(false); setEditItem(null); }}
         onSave={handleSave}
-        saving={savingId === "saving"}
+        saving={saving}
       />
     </View>
   );

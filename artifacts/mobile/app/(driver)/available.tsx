@@ -22,6 +22,10 @@ function formatCurrency(n: number) {
   return `${n.toLocaleString("ar-IQ")} د.ع`;
 }
 
+function shortId(id: string) {
+  return id.slice(0, 8).toUpperCase();
+}
+
 export default function AvailableOrdersScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -31,12 +35,15 @@ export default function AvailableOrdersScreen() {
 
   const { data: orders = [], isLoading, isRefetching, refetch } = useQuery({
     queryKey: ["driver-available"],
-    queryFn: api.driver.available,
+    queryFn: async () => {
+      const all = await api.orders.list();
+      return all.filter((o) => o.status === "ready");
+    },
     refetchInterval: 15000,
   });
 
   const pickupMutation = useMutation({
-    mutationFn: api.driver.pickup,
+    mutationFn: (orderId: string) => api.orders.updateStatus(orderId, "picked_up"),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["driver-available"] });
       qc.invalidateQueries({ queryKey: ["driver-current"] });
@@ -44,27 +51,23 @@ export default function AvailableOrdersScreen() {
   });
 
   async function handlePickup(order: Order) {
-    Alert.alert(
-      "استلام الطلب",
-      `هل تريد استلام طلب ${order.customerName}؟`,
-      [
-        { text: "إلغاء", style: "cancel" },
-        {
-          text: "استلام",
-          onPress: async () => {
-            setPickingUp(order.id);
-            try {
-              await pickupMutation.mutateAsync(order.id);
-              await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            } catch (e: any) {
-              Alert.alert("خطأ", e.message || "فشل استلام الطلب");
-            } finally {
-              setPickingUp(null);
-            }
-          },
+    Alert.alert("استلام الطلب", `هل تريد استلام الطلب #${shortId(order.id)}؟`, [
+      { text: "إلغاء", style: "cancel" },
+      {
+        text: "استلام",
+        onPress: async () => {
+          setPickingUp(order.id);
+          try {
+            await pickupMutation.mutateAsync(order.id);
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          } catch (e: any) {
+            Alert.alert("خطأ", e.message || "فشل استلام الطلب");
+          } finally {
+            setPickingUp(null);
+          }
         },
-      ]
-    );
+      },
+    ]);
   }
 
   return (
@@ -82,14 +85,7 @@ export default function AvailableOrdersScreen() {
           justifyContent: "space-between",
         }}
       >
-        <View
-          style={{
-            backgroundColor: colors.primary + "20",
-            paddingHorizontal: 10,
-            paddingVertical: 4,
-            borderRadius: 12,
-          }}
-        >
+        <View style={{ backgroundColor: colors.primary + "20", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
           <Text style={{ fontFamily: Fonts.bold, fontSize: 13, color: colors.primary }}>
             {orders.length} طلب
           </Text>
@@ -105,17 +101,8 @@ export default function AvailableOrdersScreen() {
         <FlatList
           data={orders}
           keyExtractor={(o) => o.id}
-          contentContainerStyle={{
-            padding: 16,
-            paddingBottom: insets.bottom + (Platform.OS === "web" ? 34 : 80),
-          }}
-          refreshControl={
-            <RefreshControl
-              refreshing={isRefetching}
-              onRefresh={refetch}
-              tintColor={colors.primary}
-            />
-          }
+          contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + (Platform.OS === "web" ? 34 : 80) }}
+          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />}
           ListEmptyComponent={
             <View style={{ alignItems: "center", paddingTop: 80, gap: 12 }}>
               <Feather name="package" size={48} color={colors.mutedForeground} />
@@ -123,7 +110,7 @@ export default function AvailableOrdersScreen() {
                 لا توجد طلبات جاهزة للاستلام
               </Text>
               <Text style={{ fontFamily: Fonts.regular, fontSize: 13, color: colors.mutedForeground }}>
-                سيتم التحديث تلقائياً كل 15 ثانية
+                يتحدث تلقائياً كل 15 ثانية
               </Text>
             </View>
           }
@@ -143,37 +130,24 @@ export default function AvailableOrdersScreen() {
             >
               <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 12 }}>
                 <Text style={{ fontFamily: Fonts.bold, fontSize: 17, color: colors.primary }}>
-                  {formatCurrency(item.total)}
+                  {formatCurrency(item.totalAmount)}
                 </Text>
                 <View style={{ alignItems: "flex-end" }}>
-                  <Text style={{ fontFamily: Fonts.bold, fontSize: 16, color: colors.foreground }}>
-                    {item.restaurantName || "المطعم"}
+                  <Text style={{ fontFamily: Fonts.bold, fontSize: 15, color: colors.foreground }}>
+                    {item.restaurant?.name || "المطعم"}
                   </Text>
                   <Text style={{ fontFamily: Fonts.regular, fontSize: 12, color: colors.mutedForeground }}>
-                    طلب #{item.orderNumber}
+                    طلب #{shortId(item.id)}
                   </Text>
                 </View>
               </View>
 
-              <View
-                style={{
-                  backgroundColor: colors.background,
-                  borderRadius: colors.radius,
-                  padding: 10,
-                  marginBottom: 12,
-                }}
-              >
+              <View style={{ backgroundColor: colors.background, borderRadius: colors.radius, padding: 10, marginBottom: 12 }}>
                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 6 }}>
                   <Text style={{ fontFamily: Fonts.regular, fontSize: 13, color: colors.foreground, flex: 1, textAlign: "right" }}>
                     {item.deliveryAddress}
                   </Text>
                   <Feather name="map-pin" size={14} color={colors.primary} />
-                </View>
-                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 6, marginTop: 6 }}>
-                  <Text style={{ fontFamily: Fonts.regular, fontSize: 13, color: colors.mutedForeground }}>
-                    {item.customerName}
-                  </Text>
-                  <Feather name="user" size={14} color={colors.mutedForeground} />
                 </View>
               </View>
 
